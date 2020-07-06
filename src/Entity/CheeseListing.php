@@ -2,22 +2,39 @@
 
 namespace App\Entity;
 
+use ApiPlatform\Core\Annotation\ApiFilter;
 use ApiPlatform\Core\Annotation\ApiResource;
 use App\Repository\CheeseListingRepository;
 use Carbon\Carbon;
 use Doctrine\ORM\Mapping as ORM;
 use \DateTimeInterface;
+use Symfony\Component\Serializer\Annotation\Groups;
+use Symfony\Component\Serializer\Annotation\SerializedName;
+use ApiPlatform\Core\Bridge\Doctrine\Orm\Filter\BooleanFilter;
+use ApiPlatform\Core\Bridge\Doctrine\Orm\Filter\SearchFilter;
+use ApiPlatform\Core\Bridge\Doctrine\Orm\Filter\OrderFilter;
+use ApiPlatform\Core\Serializer\Filter\PropertyFilter;
+use Symfony\Component\Validator\Constraints as Assert;
 
 /**
  * @ApiResource(
  *     collectionOperations={"get", "post"},
  *     itemOperations={
  *          "get"={},
- *          "put",
- *          "delete"},
- *     shortName="cheeses"
+ *          "put"},
+ *     normalizationContext={"groups"={"cheese_listing:read"}},
+ *     denormalizationContext={"groups"={"cheese_listing:write"}},
+ *     shortName="cheeses",
+ *     attributes={
+ *          "pagination_items_per_page"=10,
+ *          "formats"={"jsonld", "json", "html", "jsonhal", "csv"={"text/csv"}}
+ *     }
  * )
  * @ORM\Entity(repositoryClass=CheeseListingRepository::class)
+ * @ApiFilter(BooleanFilter::class, properties={"isPublished"})
+ * @ApiFilter(SearchFilter::class, properties={"title": "partial"})
+ * @ApiFilter(OrderFilter::class, properties={"id", "title"}, arguments={"orderParameterName"="order"})
+ * @ApiFilter(PropertyFilter::class)
  */
 class CheeseListing
 {
@@ -30,16 +47,28 @@ class CheeseListing
 
     /**
      * @ORM\Column(type="string", length=255)
+     * @Groups({"cheese_listing:read"})
+     * @Groups({"cheese_listing:read", "cheese_listing:write"})
+     * @Assert\NotBlank()
+     * @Assert\Length(
+     *     min=2,
+     *     max=50,
+     *     maxMessage="Describe your cheese in 50 chars or less")
      */
     private $title;
 
     /**
      * @ORM\Column(type="text")
+     * @Groups({"cheese_listing:read"})
+     * @Assert\NotBlank()
      */
     private $description;
 
     /**
      * @ORM\Column(type="integer")
+     * @Groups({"cheese_listing:read"})
+     * @Groups({"cheese_listing:read", "cheese_listing:write"})
+     * @Assert\NotBlank()
      */
     private $price;
 
@@ -51,7 +80,14 @@ class CheeseListing
     /**
      * @ORM\Column(type="boolean")
      */
-    private $isPublished;
+    private $isPublished = false;
+
+    public function __construct(string $title = null)
+    {
+        $this->setCreatedAt(new \DateTimeImmutable());
+        $this->title = $title;
+    }
+
 
     public function getId(): ?int
     {
@@ -63,18 +99,25 @@ class CheeseListing
         return $this->title;
     }
 
-    public function setTitle(string $title): self
-    {
-        $this->title = $title;
-
-        return $this;
-    }
 
     public function getDescription(): ?string
     {
         return $this->description;
     }
 
+    public function setDescription(string $description): self
+    {
+        $this->description = $description;
+
+        return $this;
+    }
+
+    /**
+     * The description of the cheese as raw text.
+     *
+     * @Groups("cheese_listing:write")
+     * @SerializedName("description")
+     */
     public function setTextDescription(string $description): self
     {
         $this->description = nl2br($description);
@@ -94,14 +137,19 @@ class CheeseListing
         return $this;
     }
 
-    public function getCreatedAt(): ?DateTimeInterface
-    {
-        return $this->createdAt;
-    }
-
+    /**
+     * How long ago in text that this cheese listing was added.
+     *
+     * @Groups("cheese_listing:read")
+     */
     public function getCreatedAtAgo(): ?string
     {
         return Carbon::instance($this->getCreatedAt())->diffForHumans();
+    }
+
+    public function getCreatedAt(): ?DateTimeInterface
+    {
+        return $this->createdAt;
     }
 
     public function setCreatedAt(DateTimeInterface $createdAt): self
