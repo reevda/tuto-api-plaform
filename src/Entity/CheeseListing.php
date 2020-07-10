@@ -20,7 +20,9 @@ use Symfony\Component\Validator\Constraints as Assert;
  * @ApiResource(
  *     collectionOperations={"get", "post"},
  *     itemOperations={
- *          "get"={},
+ *          "get"={
+ *              "normalization_context"={"groups"={"cheese_listing:read", "cheese_listing:item:get"}},
+ *          },
  *          "put"},
  *     normalizationContext={"groups"={"cheese_listing:read"}},
  *     denormalizationContext={"groups"={"cheese_listing:write"}},
@@ -32,7 +34,12 @@ use Symfony\Component\Validator\Constraints as Assert;
  * )
  * @ORM\Entity(repositoryClass=CheeseListingRepository::class)
  * @ApiFilter(BooleanFilter::class, properties={"isPublished"})
- * @ApiFilter(SearchFilter::class, properties={"title": "partial"})
+ * @ApiFilter(SearchFilter::class, properties={
+ *     "title": "partial",
+ *     "description": "partial",
+ *     "owner": "exact",
+ *     "owner.username": "partial"
+ * })
  * @ApiFilter(OrderFilter::class, properties={"id", "title"}, arguments={"orderParameterName"="order"})
  * @ApiFilter(PropertyFilter::class)
  */
@@ -48,7 +55,7 @@ class CheeseListing
     /**
      * @ORM\Column(type="string", length=255)
      * @Groups({"cheese_listing:read"})
-     * @Groups({"cheese_listing:read", "cheese_listing:write"})
+     * @Groups({"cheese_listing:read", "cheese_listing:write", "user:read"})
      * @Assert\NotBlank()
      * @Assert\Length(
      *     min=2,
@@ -59,7 +66,7 @@ class CheeseListing
 
     /**
      * @ORM\Column(type="text")
-     * @Groups({"cheese_listing:read"})
+     * @Groups({"cheese_listing:read", "user:read"})
      * @Assert\NotBlank()
      */
     private $description;
@@ -67,7 +74,7 @@ class CheeseListing
     /**
      * @ORM\Column(type="integer")
      * @Groups({"cheese_listing:read"})
-     * @Groups({"cheese_listing:read", "cheese_listing:write"})
+     * @Groups({"cheese_listing:read", "cheese_listing:write", "user:read"})
      * @Assert\NotBlank()
      */
     private $price;
@@ -81,6 +88,14 @@ class CheeseListing
      * @ORM\Column(type="boolean")
      */
     private $isPublished = false;
+
+    /**
+     * @ORM\ManyToOne(targetEntity=User::class, inversedBy="cheeseListings")
+     * @ORM\JoinColumn(nullable=false)
+     * @Groups({"cheese_listing:read", "cheese_listing:write"})
+     * @Assert\Valid()
+     */
+    private $owner;
 
     public function __construct(string $title = null)
     {
@@ -167,6 +182,18 @@ class CheeseListing
     public function setIsPublished(bool $isPublished): self
     {
         $this->isPublished = $isPublished;
+
+        return $this;
+    }
+
+    public function getOwner(): ?User
+    {
+        return $this->owner;
+    }
+
+    public function setOwner(?User $owner): self
+    {
+        $this->owner = $owner;
 
         return $this;
     }
